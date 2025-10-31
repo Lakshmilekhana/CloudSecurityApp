@@ -9,36 +9,33 @@ Original file is located at
 
 import streamlit as st
 import pandas as pd
-import pickle
+import joblib
 
-# Load trained model
-with open("best_sgd_pipeline_updated.pkl", "rb") as f:
-    pipeline = pickle.load(f)
+# Load the model
+model = joblib.load("best_sgd_pipeline_updated.pkl")
 
-st.title("Security-Aware Resource Allocation")
+st.title("Security-Aware Resource Allocation Prediction")
 
-uploaded_file = st.file_uploader("Upload a resource data CSV", type=["csv"])
+# Option 1: Manual input
+st.header("Manual Input")
+cpu = st.number_input("CPU Utilization (%)", min_value=0, max_value=100, value=50)
+mem = st.number_input("Memory Utilization (%)", min_value=0, max_value=100, value=50)
+net_in = st.number_input("Network In", value=100)
+net_out = st.number_input("Network Out", value=100)
+disk = st.number_input("Disk IO (%)", min_value=0, max_value=100, value=30)
 
-if uploaded_file is not None:
-    data = pd.read_csv(uploaded_file)
-    st.write("Sample input data:", data.head())
+input_df = pd.DataFrame([{
+    'cpu_util_percent': cpu,
+    'mem_util_percent': mem,
+    'net_in': net_in,
+    'net_out': net_out,
+    'disk_io_percent': disk
+}])
 
-    # Predict
-    data['Failure_Probability'] = pipeline.predict_proba(data)[:, 1]
-    data['Failure_Prediction'] = data['Failure_Probability'] > 0.5
-    data['Security_Risk_Score'] = (data['Failure_Probability'] * 100).round(2)
-
-    def get_action(row):
-        if row['Failure_Prediction']:
-            if row['Security_Risk_Score'] > 70:
-                return "Reallocate + Security Isolation"
-            elif row['Security_Risk_Score'] > 40:
-                return "Increase Monitoring"
-            else:
-                return "Keep but audit"
-        else:
-            return "Maintain allocation"
-    data['Resource_Action'] = data.apply(get_action, axis=1)
-
-    st.subheader("Predicted Output")
-    st.dataframe(data[['Failure_Probability', 'Failure_Prediction', 'Security_Risk_Score', 'Resource_Action']])
+# Predict
+if st.button("Predict Allocation"):
+    # Your existing predict_and_allocate function can be called here
+    input_df['Failure_Probability'] = model.predict_proba(input_df)[:,1]
+    input_df['Failure_Predicted'] = input_df['Failure_Probability'] > 0.5
+    st.write("Prediction Result:")
+    st.dataframe(input_df)
