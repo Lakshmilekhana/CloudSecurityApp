@@ -9,56 +9,36 @@ Original file is located at
 
 import streamlit as st
 import pandas as pd
-import joblib
-import numpy as np
+import pickle
 
-# --------------------------------------------------
-# Load trained ML model (your .pkl file)
-# --------------------------------------------------
-model = joblib.load("security_allocation_model.pkl")
+# Load trained model
+with open("best_sgd_pipeline_updated.pkl", "rb") as f:
+    pipeline = pickle.load(f)
 
-st.title("☁️ Security-Aware Resource Allocation System")
-st.write("Upload your dataset and view failure prediction, risk score, and allocation decisions in real-time.")
+st.title("Security-Aware Resource Allocation")
 
-uploaded = st.file_uploader("📂 Upload Resource CSV", type=["csv"])
+uploaded_file = st.file_uploader("Upload a resource data CSV", type=["csv"])
 
-if uploaded:
-    df = pd.read_csv(uploaded)
-    st.subheader("Input Data Preview")
-    st.dataframe(df.head())
+if uploaded_file is not None:
+    data = pd.read_csv(uploaded_file)
+    st.write("Sample input data:", data.head())
 
-    # List your feature columns used for training
-    feature_cols = ['cpu_util_percent', 'mem_util_percent', 'net_in', 'net_out', 'disk_io_percent']
+    # Predict
+    data['Failure_Probability'] = pipeline.predict_proba(data)[:, 1]
+    data['Failure_Prediction'] = data['Failure_Probability'] > 0.5
+    data['Security_Risk_Score'] = (data['Failure_Probability'] * 100).round(2)
 
-    # Predictions from ML model
-    df["Failure_Probability"] = model.predict_proba(df[feature_cols])[:, 1]
-    df["Failure_Prediction"] = model.predict(df[feature_cols])
-
-    # Simulate security risk score (you can later replace with real metric)
-    df["Security_Risk_Score"] = (
-        (df["cpu_util_percent"] + df["mem_util_percent"] + df["disk_io_percent"]) / 3
-    ).clip(0, 100)
-
-    # Decision logic
-    def decide_action(row):
-        risk = row["Security_Risk_Score"]
-        fail_prob = row["Failure_Probability"]
-        if fail_prob >= 0.7 or risk > 70:
-            return "❌ Skip Allocation (High Risk)"
-        elif 40 <= risk <= 70:
-            return "⚠️ Allocate with Caution (Medium Risk)"
+    def get_action(row):
+        if row['Failure_Prediction']:
+            if row['Security_Risk_Score'] > 70:
+                return "Reallocate + Security Isolation"
+            elif row['Security_Risk_Score'] > 40:
+                return "Increase Monitoring"
+            else:
+                return "Keep but audit"
         else:
-            return "✅ Safe to Allocate"
+            return "Maintain allocation"
+    data['Resource_Action'] = data.apply(get_action, axis=1)
 
-    df["Resource_Action"] = df.apply(decide_action, axis=1)
-
-    st.subheader("🔍 Prediction Results")
-    st.dataframe(df[feature_cols + ["Failure_Probability", "Failure_Prediction",
-                                    "Security_Risk_Score", "Resource_Action"]])
-
-    # Download button
-    csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button("⬇️ Download Results CSV", data=csv, file_name="results.csv")
-
-st.markdown("---")
-st.caption("Developed for project: *Security-Aware Resource Allocation and Optimization in Cloud Computing Environments*")
+    st.subheader("Predicted Output")
+    st.dataframe(data[['Failure_Probability', 'Failure_Prediction', 'Security_Risk_Score', 'Resource_Action']])
